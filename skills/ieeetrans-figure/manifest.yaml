@@ -1,0 +1,39 @@
+name: ieeetrans-figure
+version: 1.0.0
+description: >
+  Declarative manifest for ieeetrans-figure, a subclass of nature-figure. The
+  static core (contract + stance), backend fragments, references, scripts, and
+  assets are inherited through symlinks to ../nature-figure/. The only new
+  content is the panel-first multi-panel workflow under panels/. SKILL.md uses
+  this to decide whether to load the multi-panel protocol.
+
+always_load:
+  # Inherited from nature-figure through the symlinked static/ directory.
+  - static/core/contract.md
+  - static/core/stance.md
+
+multipanel:
+  # The new, ieeetrans-specific logic. Loaded when the figure has 2+ panels.
+  workflow: panels/multi-panel-workflow.md
+  schema: panels/layout-spec-schema.md
+  script: panels/layout-draft.py
+
+preference:
+  # Inherited: the same saved backend preference as nature-figure.
+  backend_script: scripts/nature_figure_backend.py
+  config_env: NATURE_FIGURE_CONFIG
+  default_config: ~/.config/nature-skills/nature-figure.json
+  behavior: |
+    For plotting tasks, first honor an explicit Python/R choice, then a clearly
+    language-specific input workflow, then the saved preference returned by the
+    backend script. If none exists, ask the user once and save the answer.
+
+references:
+  on_demand:
+    - condition: "composite figure with 2+ panels (multi-subplot / comparison / experiment figure)"
+      path: panels/multi-panel-workflow.md
+    - condition: "layout-plan JSON format, natural aspect-ratio table, IEEE size specs, assembly conventions"
+      path: panels/layout-spec-schema.md
+    # All other references are inherited from nature-figure. Resolve them through
+    # the symlinked references/ directory exactly as nature-figure's manifest
+    # (../nature-figure/manifest.yaml) declares.
