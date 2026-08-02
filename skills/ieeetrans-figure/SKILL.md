@@ -1,7 +1,7 @@
 ---
 name: ieeetrans-figure
 description: >-
-  Create, revise, audit, and export submission-grade scientific figures for IEEE Transactions and other journals in Python (matplotlib/seaborn) or R. Inherits the full nature-figure logic — figure contract, default stance, Python/R backend gate, QA contract, and export bundle — via the shared static/references/scripts/assets layer. Adds one new panel-first workflow for composite (2+ subplot) figures: draw each panel one at a time at its own natural aspect ratio (no squeezing panels into long thin strips to fill a grid), then render a placeholder-only layout draft that arranges each panel at its true size, checks it against IEEE single-column (3.5 in) or double-column (7.16 in) width with alignment / aspect-fidelity / gutter checks, show the draft to the user for confirmation, then assemble the final multi-panel figure. Single-panel figures behave exactly as nature-figure. Use for IEEE Trans figures, 多子图组合图、实验对比图、子图排版、论文配图、科研绘图、科研作图、出图、论文图表. Do not use for interactive dashboards, statistics-only analysis, data cleaning, literature review, code debugging, pure photo editing, or non-manuscript infographics.
+  Create, revise, audit, and export submission-grade scientific figures for IEEE Transactions and other journals in Python (matplotlib/seaborn) or R. Inherits the full nature-figure logic — figure contract, default stance, Python/R backend gate, QA contract, and export bundle — via the shared static/references/scripts/assets layer. Adds one new panel-first workflow for composite (2+ subplot) figures: draw each panel one at a time at its own natural aspect ratio (no squeezing panels into long thin strips to fill a grid) and save it standalone to the output's panels/ subpath as a deliverable for the user's own assembly, then render a placeholder-only layout draft that arranges each panel at its true size, checks it against IEEE single-column (3.5 in) or double-column (7.16 in) width with alignment / aspect-fidelity / gutter checks, show the draft to the user for confirmation, then assemble the final multi-panel figure. A strict no-occlusion gate applies to every panel and to the composite: a geometric overlap check (check_overlap.py) plus a mandatory glm-vision double-check, so legends, annotations, and labels must never cover data or one another. Single-panel figures behave exactly as nature-figure. Use for IEEE Trans figures, 多子图组合图、实验对比图、子图排版、论文配图、科研绘图、科研作图、出图、论文图表. Do not use for interactive dashboards, statistics-only analysis, data cleaning, literature review, code debugging, pure photo editing, or non-manuscript infographics.
 ---
 
 # IEEE Trans Figure Making — Router (subclass of nature-figure)
@@ -81,7 +81,8 @@ Determine how many panels the figure has:
 - **Composite figure with 2+ panels** (multi-subplot / comparison / experiment
   figure) — load `panels/multi-panel-workflow.md` and follow its protocol:
   1. **Panel isolation** — draw one panel at a time, each as an `ax`-centric
-     function at its natural size.
+     function at its natural size, and save it standalone to `<outdir>/panels/`
+     (PNG + vector PDF) as a deliverable for the user's own assembly.
   2. **Natural aspect ratio** — no panel is squeezed to fit a grid cell; ratio
      deviation beyond tolerance is forbidden.
   3. **Draft layout gate** — write the layout plan JSON, run
@@ -90,6 +91,10 @@ Determine how many panels the figure has:
      confirmation** before assembling.
   4. **Final assembly** — only after confirmation, reuse the same panel
      functions inside the confirmed grid and export.
+  Every panel (Step 1) and the assembled composite (Step 4) must additionally
+  pass the **two-layer no-occlusion gate**: `check_overlap.py` geometric check
+  plus a mandatory glm-vision double-check on the rendered PNG. Nothing is done
+  until all-clear.
 
 The chart serves the scientific logic; aesthetic polish is subordinate to making
 the core conclusion clear, defensible, and reviewable.
@@ -100,7 +105,9 @@ the core conclusion clear, defensible, and reviewable.
   evidence chain, panel map, archetype.
 - `panels/multi-panel-workflow.md` — the panel-first protocol for 2+ panel figures.
 - `panels/layout-spec-schema.md` — layout-plan JSON format, natural aspect-ratio
-  table, IEEE size specs, assembly conventions.
+  table, IEEE size specs, per-panel output set, assembly conventions.
+- `panels/check_overlap.py` — geometric no-occlusion checker (layer 1 of the
+  gate); import `check_no_overlap` in the plotting session.
 - `references/asset-adaptation.md` — reuse bundled examples or user templates.
 - `references/api.md` — Python palette and helpers.
 - `references/common-patterns.md`, `references/chart-types.md`,

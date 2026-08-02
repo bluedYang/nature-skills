@@ -18,6 +18,20 @@ The pipeline has four stages. None may be skipped or reordered.
 
 ## Stage 1 — Panel isolation: draw one panel at a time (逐图绘制)
 
+Create a per-figure **working directory `<outdir>`** for this run up front; it
+holds the standalone panels, the layout plan + draft, and the final exports:
+
+```
+<outdir>/
+  panels/                 # one standalone panel per label (Stage 1 deliverable)
+    a.png  a.pdf
+    b.png  b.pdf
+    ...
+  layout_plan.json        # written in Stage 3
+  layout_draft.png
+  <fig>.pdf  <fig>.svg  <fig>.tiff
+```
+
 Do **not** create the shared figure / `GridSpec` first and fill it in. Author
 every panel as an **`ax`-centric function** that draws onto a given axes and
 returns nothing:
@@ -41,13 +55,32 @@ import matplotlib.pyplot as plt
 w, h = 2.4, 1.2                      # natural size, from the ratio table below
 fig, ax = plt.subplots(figsize=(w, h))
 panel_a(ax)
-fig.savefig("panels/a.png", dpi=300) # one file per panel
+os.makedirs(f"{outdir}/panels", exist_ok=True)
+fig.savefig(f"{outdir}/panels/a.png", bbox_inches="tight", dpi=300)  # review copy
+fig.savefig(f"{outdir}/panels/a.pdf")                       # vector, editable text
 # record natural = (w, h) in the layout plan (Stage 3)
 ```
 
-One panel at a time. Iterate each panel's content until it is right **on its
-own** before any layout work. Do not tune a panel while it is already sitting in
-the final grid — that is how squeezing happens.
+**The standalone files are deliverables, not scaffolding.** `panels/<label>.png`
++ `.pdf` ship with the figure so the user can take the individual panels and
+reassemble, restyle, or reuse them (e.g. drop into their own Illustrator/PPT
+plate, or compose a variant layout by hand). Keep each panel's natural size in
+page-inches and its label in the filename. 2-D panels may use
+`bbox_inches="tight"`; 3-D panels follow the same exact-size rule as the final
+export (reserve margin inside the figure for labels + legend band).
+
+**Completion gate for every panel** — a panel is *done* only when it passes both
+layers of the no-occlusion gate (see the section below):
+
+1. **Geometric check** — `check_no_overlap(fig, label="panel a")` must return no
+   FAIL. Iterate the panel's content on its own (move the legend, reposition
+   annotations, thin crowded ticks, enlarge the panel) until clean.
+2. **Vision double-check** — run the glm-vision checklist on the saved
+   `panels/a.png`; a FAIL or a WARN-that-is-real defeats. All items clear, then —
+   and only then — move on to the next panel.
+
+Do not tune a panel while it is already sitting in the final grid — that is how
+squeezing happens.
 
 ---
 
@@ -82,7 +115,7 @@ content**:
 2. Run the draft helper on the plan:
 
    ```bash
-   python panels/layout-draft.py plan.json --out layout_draft.png
+   python panels/layout-draft.py <outdir>/layout_plan.json --out <outdir>/layout_draft.png
    ```
 
    The script:
@@ -131,17 +164,96 @@ Only after the user confirms the draft:
    Place each panel at its natural size inside its cell (the same placement the
    draft rendered). Add panel labels **a, b, c** bold lowercase, top-left,
    ~10 pt.
-3. Export the bundle — SVG + PDF + 600-dpi TIFF + 300-dpi review PNG — using the
+3. **No-occlusion gate on the composite (geometric layer, pre-export).** Run
+   `check_no_overlap(fig, label="<fig> composite")` on the assembled figure
+   *in memory, before any export*. Composite assembly is exactly where new
+   collisions appear — panel labels near data, shared axes, gutters closing up.
+   Iterate fixes (move legends/labels, clear gutters, add `edge_in` margin) and
+   re-render until the report has no FAIL.
+4. Export the bundle — SVG + PDF + 600-dpi TIFF + 300-dpi review PNG — using the
    inherited save helper (`save_pub_py` in `static/fragments/backend/python.md`).
    **3-D panels:** `bbox_inches="tight"` is broken for 3-D axes (matplotlib
    computes a square-ish or oversized bounding box). Export 3-D panels at the
    exact figure size instead and reserve margin inside the figure for the 3-D
    axis labels and a legend band.
-4. Final QA: run `scripts/validate_figure.py` on the source; open the exports at
+5. **Vision double-check on the final PNG (vision layer, post-export).** Run the
+   glm-vision checklist on the exported review PNG of the *whole composite* (see
+   the no-occlusion section below). Nothing is final until it passes. A failure
+   here means fixing, re-exporting, and re-running the gate — never shipping a
+   "mostly fine" figure.
+6. Final QA: run `scripts/validate_figure.py` on the source; open the exports at
    final size; verify text is readable (≥ 8 pt preferred), no overlaps, and the
    assembled panel sizes/alignment match the confirmed draft exactly. If the
    exact-size export clips tick labels at the figure edge, increase the layout
    `edge_in` margin rather than switching back to `bbox_inches="tight"`.
+
+---
+
+## The two-layer no-occlusion gate (严格无任何遮挡)
+
+Complex legends, call-outs, axis labels, and annotations crowd a panel and can
+cover data or one another — the exact "bad, 混乱" look we forbid. Nothing in this
+skill is *done* unless it survives this gate, at **two points**: once for every
+standalone panel (end of Stage 1) and once for the assembled composite (Stage 4).
+The two layers play different roles:
+
+| Layer | What it proves | Verdicts |
+|---|---|---|
+| 1. Geometric check (`check_overlap.py`) | Measured text/legend bounding boxes do **not** intersect (text↔text, legend↔text). Legend inside the plot area and text clipped at the edge are surfaced. | FAIL = definite collision → must fix. WARN = needs human/vision eyes. |
+| 2. Vision double-check (glm-vision) | Read the rendered pixels: does a legend *cover a curve*, does a call-out *cross a point*? Geometry cannot judge this; the image can. | any real hit → fix, re-render, re-check. |
+
+The geometric layer is per-panel cheap and deterministic, so run it on every
+render; the vision layer is the mandatory final verdict on every standalone
+panel and on the assembled figure.
+
+### Layer 1 — `check_overlap.py`
+
+Copy the script next to your plotting script (or add its `panels/` dir to
+`sys.path`), then, after `fig` is drawn:
+
+```python
+from check_overlap import check_no_overlap
+report = check_no_overlap(fig, label="panel a", map_path=f"{outdir}/maps/a_overlaps.png")
+fails = [m for st, m in report if st == "FAIL"]   # must be empty
+warns = [m for st, m in report if st == "WARN"]   # each one => vision resolves it
+```
+
+- `map_path` writes an annotated PNG drawing every element's box and highlighting
+  every FAIL pair — hand it to the vision tool or the user for fast locating.
+- Common fixes iteration order: move/`bbox_to_anchor` the legend to an empty
+  grass area → shorten or reposition annotations → thin crowded tick labels
+  (`MaxNLocator`, `plt.setp(labels, rotation=...)`) → enlarge the panel / add
+  `edge_in` margin (clipped-text WARN). Fixes go into the **shared `ax`-centric
+  function**, so both the standalone panel and the future composite inherit them.
+
+### Layer 2 — glm-vision double-check
+
+Every standalone `panels/<label>.png` **and** the final composite PNG is
+inspected with the vision tool. In this skill's environment that is
+`mcp__glm-vision__image_understand` — pass the saved PNG as `image_source` and
+this fixed checklist as the reader prompt (adjust for whatever vision tool the
+session exposes; the checklist is the contract):
+
+```text
+Check this scientific figure panel for occlusions. For each item reply PASS or
+FAIL with a one-line reason:
+1. Does any legend cover or block data — points, lines, bars, heatmap cells,
+   other text?
+2. Do any annotations/text cross, touch, or sit on top of plotted data
+   (curves, symbols, fills, cells)?
+3. Do any two texts collide: title vs axis label, annotation vs legend,
+   annotation vs tick label, tick labels among themselves?
+4. Is any element clipped at the figure/canvas edge?
+5. Overall: is the panel visually crowded or messy because of overlaps?
+Verdict line: FAIL if any item FAILs, else PASS.
+```
+
+A FAIL (or a WARN from layer 1 that the image confirms) sends the panel back to
+iteration. Only an all-PASS world proceeds to the next panel / to delivery.
+
+**The rule that outranks both layers:** if the vision image shows a legend
+sitting on data marks or a text crossing a curve — regardless of what the
+geometric bbox math printed — it is covered, fix it.
 
 ---
 
@@ -170,3 +282,7 @@ inherited unchanged.
 2. Natural aspect ratio or restructure — never squeeze. (自然形状)
 3. Placeholder draft + geometry checks → STOP → user confirms. (排版草稿)
 4. Assemble with the same functions at the confirmed sizes, then QA. (最终排版)
+5. Every panel ships standalone to `<outdir>/panels/` (PNG + vector PDF) as a
+   deliverable for the user's own assembly. (独立交付)
+6. Two-layer no-occlusion gate on every panel and on the composite:
+   geometric `check_overlap.py` + glm-vision double-check. All-clear only. (无遮挡)

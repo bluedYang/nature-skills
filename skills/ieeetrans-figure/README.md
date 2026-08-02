@@ -16,7 +16,9 @@ validation panels + a quantitative panel) is plotted by drawing the whole
 ratios distort, and the composite looks ad hoc. This skill enforces a gate:
 
 1. **Panel isolation** — draw one panel at a time, each as an `ax`-centric
-   function at its natural size.
+   function at its natural size, and save it standalone to the output's
+   `panels/` subpath (PNG + vector PDF) as a deliverable for the user's own
+   assembly.
 2. **Natural aspect ratio** — a panel may be stretched at most ±`tolerance`
    (default 15%) to achieve grid alignment; beyond that the grid is
    restructured, never the panel.
@@ -26,6 +28,11 @@ ratios distort, and the composite looks ad hoc. This skill enforces a gate:
    7.16 in). It **stops for user confirmation** before any content is composed.
 4. **Final assembly** — the same `ax`-centric functions are reused at the
    confirmed sizes and exported SVG + PDF + 600-dpi TIFF.
+5. **No-occlusion gate** — every standalone panel **and** the assembled
+   composite must pass a strict two-layer check: a geometric overlap check
+   (`panels/check_overlap.py`) followed by a mandatory glm-vision double-check
+   on the rendered PNG. Legends, annotations, and labels may never cover data
+   or one another; a figure is done only when every panel is all-clear.
 
 ## Layout plan
 
@@ -53,7 +60,9 @@ ieeetrans-figure/
 │   ├── multi-panel-workflow.md # the 4-stage panel-first protocol
 │   ├── layout-spec-schema.md   # plan JSON, natural-ratio table, IEEE specs
 │   ├── layout-draft.py         # placeholder draft renderer + geometry checks
+│   ├── check_overlap.py        # geometric no-occlusion checker (gate layer 1)
 │   ├── test_layout_draft.py    # regression tests for the geometry engine
+│   ├── test_check_overlap.py   # regression tests for the no-occlusion checker
 │   └── example-plan.json       # runnable example (0 FAIL)
 ├── static/    ─┐
 ├── references/─┤  symlinked to ../nature-figure/   ← inherited logic
@@ -80,20 +89,27 @@ this skill's own work.
 ## Dependencies
 
 - Python 3.9+
-- `matplotlib` (for `layout-draft.py`; figures themselves are drawn by the
-  selected backend)
-- No other runtime requirements. The geometry engine is pure arithmetic;
-  `panels/test_layout_draft.py` runs without matplotlib.
+- `matplotlib` (for `layout-draft.py` the draft renderer and `check_overlap.py`
+  the no-occlusion checker; figures themselves are drawn by the selected
+  backend)
+- No other runtime requirements.
 
 ## Tests
 
+Both suites are plain scripts (no pytest) and run in the matplotlib-enabled
+environment:
+
 ```bash
-python panels/test_layout_draft.py       # 15 regression checks (no matplotlib needed)
+python panels/test_layout_draft.py       # geometry-engine regression checks
+python panels/test_check_overlap.py      # no-occlusion checker regression checks
 ```
 
-Covers the two historical placement bugs (region boxes shifted down; positions
-not scaled when the composition is rescaled to the target column width), span
-handling, the protrusion check, and the validation errors.
+`test_layout_draft.py` covers the two historical placement bugs (region boxes
+shifted down; positions not scaled when the composition is rescaled to the
+target column width), span handling, the protrusion check, and the validation
+errors. `test_check_overlap.py` covers the no-occlusion invariants: a clean
+figure has zero FAIL/WARN, a legend on the data warns, co-located texts and a
+legend touching an annotation FAIL, and an off-canvas text warns.
 
 ## 许可证与署名
 

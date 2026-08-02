@@ -140,3 +140,46 @@ Because assembly places each panel at natural size (never stretches to fill a
 cell), the "no squeezing" rule is enforced by construction. If you want a
 panel to fill its cell exactly, that is a deliberate layout choice: state it in
 the plan and confirm the resulting (small) distortion stays within `tolerance`.
+
+---
+
+## 5. Per-panel output set (子图独立交付物)
+
+Each standalone panel is a *deliverable*, saved under the figure's working
+directory — not scaffolding. Users routinely take the individual panels and
+reassemble, restyle, or reuse them (own Illustrator/PPT plate, hand-composed
+variant, a different journal's template).
+
+| Path | Content |
+|---|---|
+| `<outdir>/panels/<label>.png` | Standalone panel at its **natural size**, 300 dpi, `bbox_inches="tight"` (2-D) |
+| `<outdir>/panels/<label>.pdf` | Same panel as vector PDF (editable text) |
+| `<outdir>/panels/README.txt` (optional) | Panel label → natural size in inches, for the user's own assembly |
+
+Rules:
+- Filename = the panel's layout-plan label (`a`, `b`, …). A panel's natural
+  `w × h` (in inches) is the same value recorded in the plan's `panels{}` map.
+- **3-D panels:** keep `bbox_inches="tight"` off (it computes a wrong box for
+  3-D axes); export at the exact figure size with margin reserved inside the
+  figure for labels + legend band.
+- These files are produced in Stage 1 and are not re-scaled later; Stage 4
+  renders the *same* `ax`-centric function inside the confirmed grid, so the
+  standalone panel and its in-figure copy stay identical.
+
+---
+
+## 6. No-occlusion gate reference
+
+Every standalone panel and the assembled composite must pass the two-layer
+no-occlusion gate before it counts as done (full protocol in
+`multi-panel-workflow.md` → *The two-layer no-occlusion gate*).
+
+- **Layer 1 — geometric:** `panels/check_overlap.py`, importable
+  `check_no_overlap(fig, label=..., map_path=...)` → `[(status, msg)]`;
+  FAIL = text↔text or legend↔text collision (must be empty), WARN = legend
+  inside plot area / text clipped at edge (vision resolves). Exit code non-zero
+  when a FAIL is present (`python panels/check_overlap.py --demo` self-check).
+- **Layer 2 — vision:** `mcp__glm-vision__image_understand` on each saved PNG
+  with the fixed occlusion checklist in the workflow doc. The image is the final
+  authority: an on-data legend or a call-out crossing a curve fails regardless of
+  what the bbox math printed.
